@@ -2,61 +2,57 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1">
   <meta name="theme-color" content="#0f172a">
-  <meta name="description" content="SinoGraph Pro — Mapas mentais de vocabulário mandarim com grafo interativo multi-chunk">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="SinoGraph Pro — Mapas mentais de vocabulário mandarim. Você cria cada mapa e cada palavra.">
   <title>SinoGraph Pro</title>
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icons/icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <link rel="stylesheet" href="css/styles.css">
-  <!-- D3.js for force-directed graph -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
-  <!-- SweetAlert2 -->
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body>
 
-  <!-- HEADER -->
   <header class="app-header">
     <div class="flex items-center gap-2">
       <div class="brand-icon">◈</div>
-      <h1>SinoGraph Pro</h1>
+      <h1>SinoGraph</h1>
     </div>
 
     <div class="chunk-select-wrap">
-      <select id="chunkSelect" onchange="onChunkSelectChange(this.value)" aria-label="Selecionar chunk">
-        <option value="GLOBAL">🌐 Todos os Chunks</option>
+      <select id="chunkSelect" onchange="onChunkSelectChange(this.value)" aria-label="Mapa">
+        <option value="GLOBAL">🌐 Todos</option>
       </select>
     </div>
 
     <div class="header-actions">
-      <button id="togglePinyinBtn" class="btn-icon" onclick="toggleRecall('pinyin')" title="Ocultar/mostrar Pinyin">拼</button>
-      <button id="toggleTransBtn" class="btn-icon" onclick="toggleRecall('trans')" title="Ocultar/mostrar Tradução">译</button>
+      <button id="togglePinyinBtn" class="btn-icon" onclick="toggleRecall('pinyin')" title="Pinyin">拼</button>
+      <button id="toggleTransBtn" class="btn-icon" onclick="toggleRecall('trans')" title="Tradução">译</button>
       <div style="position:relative">
-        <button id="dataMenuBtn" class="btn-icon" onclick="toggleDataMenu()" title="Dados">⋮</button>
-        <div id="dataMenu" class="hidden" style="position:absolute;right:0;top:44px;width:200px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:6px;z-index:50;box-shadow:0 12px 32px rgba(0,0,0,0.5)">
-          <button class="btn btn-outline btn-sm w-full" style="justify-content:flex-start;margin-bottom:4px" onclick="exportDataJSON()">↓ Exportar JSON</button>
+        <button id="dataMenuBtn" class="btn-icon" onclick="toggleDataMenu()" title="Menu">⋮</button>
+        <div id="dataMenu" class="hidden" style="position:absolute;right:0;top:40px;width:190px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:6px;z-index:50;box-shadow:0 12px 32px rgba(0,0,0,0.5)">
+          <button class="btn btn-outline btn-sm w-full" style="justify-content:flex-start;margin-bottom:4px" onclick="exportDataJSON()">↓ Exportar</button>
           <label class="btn btn-outline btn-sm w-full" style="justify-content:flex-start;margin-bottom:4px;cursor:pointer">
-            ↑ Importar JSON
+            ↑ Importar
             <input type="file" accept=".json" onchange="importDataJSON(event)" style="display:none">
           </label>
-          <button class="btn btn-outline btn-sm w-full" style="justify-content:flex-start;color:var(--danger);border-color:var(--danger)" onclick="resetToDefaultData()">↺ Resetar</button>
+          <button class="btn btn-outline btn-sm w-full" style="justify-content:flex-start;color:var(--danger);border-color:var(--danger)" onclick="resetToDefaultData()">↺ Limpar tudo</button>
         </div>
       </div>
     </div>
   </header>
 
-  <!-- TABS -->
   <nav class="tabs-nav">
-    <button id="tabGraphBtn" class="tab-btn active" onclick="switchMainTab('graph')">Mapa / Grafo</button>
-    <button id="tabTableBtn" class="tab-btn" onclick="switchMainTab('table')">Vocabulário</button>
+    <button id="tabGraphBtn" class="tab-btn active" onclick="switchMainTab('graph')">Mapa</button>
+    <button id="tabTableBtn" class="tab-btn" onclick="switchMainTab('table')">Lista</button>
   </nav>
 
-  <!-- MAIN -->
   <main class="main-content">
 
-    <!-- GRAPH VIEW -->
     <div id="graphView" class="view active">
       <div class="graph-layout">
         <div class="graph-workspace" id="graphContainer">
@@ -64,44 +60,53 @@
             <button class="btn-icon" onclick="zoomGraph(1.25)" title="Zoom +">＋</button>
             <button class="btn-icon" onclick="zoomGraph(0.8)" title="Zoom −">−</button>
             <button class="btn-icon" onclick="resetGraphZoom()" title="Centralizar">⊙</button>
-            <button class="btn-icon" style="background:var(--accent);color:#0f172a;border-color:var(--accent)" onclick="openNewNodeModal()" title="Novo vocábulo">＋</button>
+            <button class="btn-icon" style="background:var(--accent);color:#0f172a;border-color:var(--accent)" onclick="openNewNodeModal()" title="Nova palavra">＋</button>
           </div>
-          <div class="graph-legend">
-            <span><span class="legend-dot" style="background:#f59e0b"></span> Raiz</span>
-            <span><span class="legend-dot" style="background:#0ea5e9"></span> Termo</span>
-            <span><span class="legend-dot" style="background:#22c55e;border:1.5px dashed #22c55e"></span> Inter-Chunk</span>
+
+          <div id="graphEmpty" class="graph-empty">
+            <div style="font-size:2rem;opacity:0.35;margin-bottom:8px">🗺️</div>
+            <p class="text-muted text-sm" style="max-width:220px;line-height:1.4">
+              Nenhum mapa ainda.<br>Crie um tema e adicione palavras.
+            </p>
+            <div class="cta flex gap-2" style="flex-wrap:wrap;justify-content:center">
+              <button class="btn btn-primary btn-sm" onclick="openNewChunkModal()">+ Criar tema</button>
+              <button class="btn btn-outline btn-sm" onclick="openNewNodeModal()">+ Palavra</button>
+            </div>
           </div>
+
           <svg id="d3GraphSvg"></svg>
         </div>
 
         <aside class="sidebar" id="nodeDetailSidebar">
           <div class="sidebar-header">
-            <span style="font-weight:600;font-size:0.9rem">Inspeção</span>
+            <span style="font-weight:600;font-size:0.85rem">Estudo</span>
             <span id="sidebarChunkTag" class="badge-muted badge">Nenhum nó</span>
           </div>
           <div id="sidebarBody" class="sidebar-body">
             <div class="empty-state">
-              <div class="icon">👆</div>
-              <p>Clique em qualquer palavra no mapa para explorar pronúncia, conexões e frases.</p>
+              <div class="icon">🗺️</div>
+              <p>Crie um tema para começar seu mapa mental.</p>
+              <button class="btn btn-primary btn-sm" onclick="openNewChunkModal()">+ Criar tema</button>
             </div>
           </div>
         </aside>
       </div>
     </div>
 
-    <!-- TABLE VIEW -->
     <div id="tableView" class="view">
       <div class="table-view-inner">
         <div class="filter-bar">
           <div class="search-wrap">
             <span class="search-icon">⌕</span>
-            <input type="search" id="tableSearchInput" class="input" placeholder="Buscar Hanzi, Pinyin, Tradução..." oninput="renderTable()">
+            <input type="search" id="tableSearchInput" class="input" placeholder="Buscar..." oninput="renderTable()">
           </div>
-          <select id="tableChunkFilter" class="select" style="max-width:180px" onchange="renderTable()">
-            <option value="ALL">Todos os Chunks</option>
-          </select>
-          <button class="btn btn-primary btn-sm" onclick="openNewChunkModal()">+ Tema</button>
-          <button class="btn btn-outline btn-sm" onclick="openNewNodeModal()">+ Vocábulo</button>
+          <div class="filter-actions">
+            <select id="tableChunkFilter" class="select" onchange="renderTable()">
+              <option value="ALL">Todos</option>
+            </select>
+            <button class="btn btn-primary btn-sm" onclick="openNewChunkModal()">+ Tema</button>
+            <button class="btn btn-outline btn-sm" onclick="openNewNodeModal()">+ Palavra</button>
+          </div>
         </div>
 
         <div class="vocab-table-wrap">
@@ -112,8 +117,7 @@
                   <th>Hanzi</th>
                   <th>Pinyin</th>
                   <th>Tradução</th>
-                  <th>Chunk</th>
-                  <th>Inter?</th>
+                  <th>Mapa</th>
                   <th></th>
                 </tr>
               </thead>
@@ -126,22 +130,20 @@
 
   </main>
 
-  <!-- TOAST -->
   <div id="toastContainer" class="toast-container"></div>
 
-  <!-- MODAL: NEW CHUNK -->
   <div id="newChunkModal" class="modal-overlay hidden">
     <div class="modal">
       <div class="modal-header">
-        <h3>Novo Tema (Chunk)</h3>
+        <h3>Novo mapa mental</h3>
         <button class="btn-icon" onclick="closeModal('newChunkModal')">✕</button>
       </div>
       <div class="form-group">
-        <label class="label" for="newChunkName">Título do tema</label>
-        <input type="text" id="newChunkName" class="input" placeholder="ex: 商务汉语 - Negócios">
+        <label class="label" for="newChunkName">Nome do tema</label>
+        <input type="text" id="newChunkName" class="input" placeholder="ex: 力量举 - Powerlifting">
       </div>
       <div class="form-group">
-        <label class="label" for="newChunkColor">Cor identificadora</label>
+        <label class="label" for="newChunkColor">Cor</label>
         <input type="color" id="newChunkColor" value="#f59e0b" style="width:100%;height:44px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--bg);cursor:pointer">
       </div>
       <div class="btn-group mt-3">
@@ -151,36 +153,37 @@
     </div>
   </div>
 
-  <!-- MODAL: NEW NODE -->
   <div id="newNodeModal" class="modal-overlay hidden">
     <div class="modal">
       <div class="modal-header">
-        <h3>Novo Vocábulo</h3>
+        <h3>Nova palavra</h3>
         <button class="btn-icon" onclick="closeModal('newNodeModal')">✕</button>
       </div>
       <div class="form-group">
         <label class="label" for="newNodeHanzi">Hanzi *</label>
-        <input type="text" id="newNodeHanzi" class="input" placeholder="例: 坚持">
+        <input type="text" id="newNodeHanzi" class="input" placeholder="例: 深蹲" autocomplete="off">
       </div>
       <div class="form-group">
         <label class="label" for="newNodePinyin">Pinyin *</label>
-        <input type="text" id="newNodePinyin" class="input" placeholder="jiān chí">
+        <input type="text" id="newNodePinyin" class="input" placeholder="shēn dūn" autocomplete="off">
       </div>
       <div class="form-group">
         <label class="label" for="newNodeTranslation">Tradução *</label>
-        <input type="text" id="newNodeTranslation" class="input" placeholder="Persistir / Manter o foco">
+        <input type="text" id="newNodeTranslation" class="input" placeholder="Agachamento (Squat)" autocomplete="off">
       </div>
       <div class="form-group">
-        <label class="label" for="newNodeChunkSelect">Chunk</label>
+        <label class="label" for="newNodeChunkSelect">Mapa / tema</label>
         <select id="newNodeChunkSelect" class="select"></select>
       </div>
       <div class="form-group">
-        <label class="label" for="newNodeParentSelect">Conectar ao pai (opcional)</label>
-        <select id="newNodeParentSelect" class="select"></select>
+        <label class="label" for="newNodeParentSelect">Ligar a (pai)</label>
+        <select id="newNodeParentSelect" class="select">
+          <option value="">Sem pai (raiz)</option>
+        </select>
       </div>
       <div class="form-group">
-        <label class="label" for="newNodeNotes">Notas</label>
-        <textarea id="newNodeNotes" class="textarea" rows="2" placeholder="Uso, nuance cultural..."></textarea>
+        <label class="label" for="newNodeNotes">Notas (opcional)</label>
+        <textarea id="newNodeNotes" class="textarea" rows="2" placeholder="Uso, nuance..."></textarea>
       </div>
       <div class="btn-group mt-3">
         <button class="btn btn-outline" onclick="closeModal('newNodeModal')">Cancelar</button>
@@ -191,7 +194,6 @@
 
   <script src="js/app.js"></script>
   <script>
-    // Service Worker registration
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js').catch(() => {});

@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'sinograph-v1';
+const CACHE_VERSION = 'sinograph-v2';
 const ASSETS = [
   './',
   './index.html',
