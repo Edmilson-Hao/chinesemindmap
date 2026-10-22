@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full bg-slate-950 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SinoGraph Pro - Sistema Integrado de Mapas Mentais & Vocabulário</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- D3.js v7 for Physics Graph Layout -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f7ff',
+                            100: '#e0effe',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            700: '#0369a1',
+                            950: '#082f49',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Modern Scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #090d16;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #334155;
+        }
+
+        /* SVG Graph Styling */
+        .link-line {
+            stroke-opacity: 0.4;
+            transition: stroke 0.3s, stroke-width 0.3s, stroke-opacity 0.3s;
+        }
+        .link-line.cross-chunk {
+            stroke-dasharray: 4, 4;
+            stroke-opacity: 0.7;
+        }
+        .link-line.highlighted {
+            stroke-opacity: 0.9 !important;
+            stroke-width: 3.5px !important;
+        }
+
+        .node-circle {
+            transition: r 0.2s, stroke 0.2s, stroke-width 0.2s, filter 0.2s;
+            cursor: pointer;
+        }
+        .node-circle:hover {
+            filter: drop-shadow(0 0 8px currentColor);
+        }
+        .node-circle.is-cross {
+            stroke-dasharray: 3, 2;
+        }
+
+        .node-label-hanzi {
+            font-weight: 600;
+            pointer-events: none;
+            user-select: none;
+        }
+        .node-label-pinyin {
+            font-size: 9px;
+            fill: #38bdf8;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        .blur-recall {
+            filter: blur(5px);
+            user-select: none;
+            transition: filter 0.2s ease;
+        }
+        .blur-recall:hover {
+            filter: blur(0);
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col font-sans overflow-hidden bg-slate-950 text-slate-100">
+
+    <!-- TOP HEADER NAVBAR -->
+    <header class="h-16 border-b border-slate-800/80 bg-slate-900/90 backdrop-blur px-4 lg:px-6 flex items-center justify-between z-30 shrink-0">
+        <div class="flex items-center space-x-3">
+            <div class="p-2 bg-sky-500/10 border border-sky-500/20 rounded-xl text-sky-400">
+                <i data-lucide="network" class="w-5 h-5"></i>
+            </div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="font-semibold text-slate-100 text-base tracking-tight">SinoGraph Pro</h1>
+                    <span class="text-[10px] font-semibold text-sky-400 bg-sky-950 px-2 py-0.5 rounded-full border border-sky-800/60 uppercase tracking-wider">Multi-Chunk System</span>
+                </div>
+                <p class="text-xs text-slate-400 hidden sm:block">Grafo de Conhecimento Mandarim & Gerador Contextual de Frases</p>
+            </div>
+        </div>
+
+        <!-- CENTER CHUNK SELECTOR -->
+        <div class="flex items-center gap-2">
+            <div class="relative flex items-center bg-slate-950 border border-slate-800 rounded-lg p-1">
+                <i data-lucide="layers" class="w-4 h-4 ml-2 text-slate-400"></i>
+                <select id="chunkSelect" onchange="onChunkSelectChange(this.value)" class="bg-transparent text-xs font-medium text-slate-200 py-1 pl-2 pr-8 focus:outline-none cursor-pointer">
+                    <option value="GLOBAL" class="bg-slate-900">🌐 Todos os Chunks (Teia Geral)</option>
+                    <!-- Options populated dynamically -->
+                </select>
+            </div>
+
+            <button onclick="openNewChunkModal()" title="Criar Novo Chunk" class="p-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 transition flex items-center gap-1 text-xs">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span class="hidden md:inline">Novo Tema</span>
+            </button>
+        </div>
+
+        <!-- RIGHT GLOBAL ACTIONS -->
+        <div class="flex items-center gap-2">
+            <!-- Active Recall Toggles -->
+            <div class="hidden lg:flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+                <button id="togglePinyinBtn" onclick="toggleRecall('pinyin')" class="px-2.5 py-1 rounded transition flex items-center gap-1 text-slate-300 hover:text-white hover:bg-slate-800">
+                    <i data-lucide="eye" class="w-3.5 h-3.5 text-sky-400"></i>
+                    <span>Pinyin</span>
+                </button>
+                <div class="w-px h-3.5 bg-slate-800"></div>
+                <button id="toggleTranslationBtn" onclick="toggleRecall('trans')" class="px-2.5 py-1 rounded transition flex items-center gap-1 text-slate-300 hover:text-white hover:bg-slate-800">
+                    <i data-lucide="eye" class="w-3.5 h-3.5 text-sky-400"></i>
+                    <span>Tradução</span>
+                </button>
+            </div>
+
+            <!-- Tab Switcher -->
+            <div class="flex p-1 bg-slate-950 border border-slate-800 rounded-lg">
+                <button id="tabGraphBtn" onclick="switchMainTab('graph')" class="px-3 py-1 rounded-md text-xs font-medium transition flex items-center gap-1.5 bg-sky-600 text-white shadow">
+                    <i data-lucide="git-fork" class="w-3.5 h-3.5"></i>
+                    <span class="hidden sm:inline">Mapa / Grafo</span>
+                </button>
+                <button id="tabTableBtn" onclick="switchMainTab('table')" class="px-3 py-1 rounded-md text-xs font-medium transition flex items-center gap-1.5 text-slate-400 hover:text-slate-200">
+                    <i data-lucide="table" class="w-3.5 h-3.5"></i>
+                    <span class="hidden sm:inline">Vocabulário</span>
+                </button>
+            </div>
+
+            <!-- Import / Export Controls -->
+            <div class="relative">
+                <button onclick="toggleDataMenu()" class="p-2 bg-slate-900 border border-slate-800 text-slate-400 hover:text-slate-200 rounded-lg transition">
+                    <i data-lucide="more-vertical" class="w-4 h-4"></i>
+                </button>
+                <div id="dataMenu" class="hidden absolute right-0 mt-2 w-48 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl p-1 z-50 text-xs">
+                    <button onclick="exportDataJSON()" class="w-full text-left px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg flex items-center gap-2">
+                        <i data-lucide="download" class="w-4 h-4 text-emerald-400"></i> Exportar Dados (JSON)
+                    </button>
+                    <label class="w-full text-left px-3 py-2 text-slate-300 hover:bg-slate-800 rounded-lg flex items-center gap-2 cursor-pointer">
+                        <i data-lucide="upload" class="w-4 h-4 text-sky-400"></i> Importar JSON
+                        <input type="file" accept=".json" onchange="importDataJSON(event)" class="hidden">
+                    </label>
+                    <div class="h-px bg-slate-800 my-1"></div>
+                    <button onclick="resetToDefaultData()" class="w-full text-left px-3 py-2 text-rose-400 hover:bg-rose-950/30 rounded-lg flex items-center gap-2">
+                        <i data-lucide="rotate-ccw" class="w-4 h-4"></i> Resetar Padrão
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="flex-1 relative flex overflow-hidden">
+
+        <!-- TAB 1: GRAPH & MIND MAP VIEW -->
+        <div id="graphView" class="w-full h-full flex flex-col lg:flex-row relative">
+            
+            <!-- Graph Visualizer Workspace -->
+            <div class="flex-1 h-full relative bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:28px_28px] overflow-hidden" id="graphContainer">
+                
+                <!-- Floating Graph Controls Toolbar -->
+                <div class="absolute top-4 left-4 z-20 flex flex-col gap-2 bg-slate-900/90 backdrop-blur p-1.5 rounded-xl border border-slate-800/80 shadow-2xl">
+                    <button onclick="zoomGraph(1.25)" title="Aumentar Zoom" class="p-2 hover:bg-slate-800 rounded-lg text-slate-300 hover:text-white transition">
+                        <i data-lucide="zoom-in" class="w-4 h-4"></i>
+                    </button>
+                    <button onclick="zoomGraph(0.8)" title="Diminuir Zoom" class="p-2 hover:bg-slate-800 rounded-lg text-slate-300 hover:text-white transition">
+                        <i data-lucide="zoom-out" class="w-4 h-4"></i>
+                    </button>
+                    <button onclick="resetGraphZoom()" title="Centralizar Visualização" class="p-2 hover:bg-slate-800 rounded-lg text-slate-300 hover:text-white transition">
+                        <i data-lucide="maximize" class="w-4 h-4"></i>
+                    </button>
+                    <div class="w-full h-px bg-slate-800"></div>
+                    <button onclick="openNewNodeModal()" title="Adicionar Novo Vocábulo neste Chunk" class="p-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg transition">
+                        <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                    </button>
+                </div>
+
+                <!-- Floating Legend & Info -->
+                <div class="absolute top-4 right-4 z-20 hidden md:flex items-center gap-3 bg-slate-900/90 backdrop-blur p-2.5 rounded-xl border border-slate-800 shadow-2xl text-xs text-slate-300">
+                    <span class="font-semibold text-slate-400">Legenda:</span>
+                    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-500 border border-amber-300"></span> Raiz/Núcleo</span>
+                    <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-sky-500"></span> Termo Padrão</span>
+                    <span class="flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-full border-2 border-dashed border-emerald-400 bg-emerald-500/20"></span> Nó Inter-Chunk (Cruzado)</span>
+                </div>
+
+                <!-- D3 SVG Container -->
+                <svg id="d3GraphSvg" class="w-full h-full select-none cursor-grab active:cursor-grabbing"></svg>
+
+                <div class="absolute bottom-4 left-4 text-xs text-slate-500 pointer-events-none hidden sm:block">
+                    Pressione Shift + Arraste para reposicionar nós fixos | Clique nos nós para abrir o painel detalhado
+                </div>
+            </div>
+
+            <!-- RIGHT SIDEBAR: WORD DETAIL & MULTI-WORD PHRASE GENERATOR -->
+            <aside id="nodeDetailSidebar" class="w-full lg:w-[420px] border-t lg:border-t-0 lg:border-l border-slate-800/80 bg-slate-900/95 backdrop-blur flex flex-col z-20 shrink-0 h-1/2 lg:h-full transition-all">
+                
+                <!-- Sidebar Header -->
+                <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <i data-lucide="file-text" class="w-4 h-4 text-sky-400"></i>
+                        <h2 class="font-semibold text-slate-200 text-sm">Inspeção Contextual</h2>
+                    </div>
+                    <span id="sidebarChunkTag" class="text-[10px] uppercase font-semibold px-2.5 py-0.5 rounded-full bg-slate-800 text-sky-400 border border-slate-700">
+                        Nenhum Nó Selecionado
+                    </span>
+                </div>
+
+                <!-- Dynamic Content Container -->
+                <div id="sidebarBody" class="p-5 flex-1 overflow-y-auto space-y-6">
+                    <!-- Default State -->
+                    <div class="text-center py-16 text-slate-500 flex flex-col items-center gap-3">
+                        <i data-lucide="mouse-pointer-click" class="w-10 h-10 stroke-1 text-slate-600"></i>
+                        <p class="text-sm">Clique em qualquer palavra no mapa interativo para explorar pronúncia, conexões entre temas e exemplos práticos.</p>
+                    </div>
+                </div>
+
+            </aside>
+        </div>
+
+        <!-- TAB 2: GENERAL VOCABULARY TABLE & SEARCH -->
+        <div id="tableView" class="w-full h-full flex flex-col p-4 lg:p-8 overflow-y-auto hidden">
+            <div class="max-w-6xl mx-auto w-full space-y-6">
+                
+                <!-- Filter Bar -->
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900 p-4 rounded-xl border border-slate-800/80 shadow-xl">
+                    <!-- Search Input -->
+                    <div class="relative flex-1">
+                        <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input type="text" id="tableSearchInput" oninput="renderTable()" placeholder="Buscar por Hanzi, Pinyin, Tradução em Português ou Nota..." 
+                            class="w-full bg-slate-950 border border-slate-800 rounded-lg pl-10 pr-4 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition">
+                    </div>
+
+                    <!-- Filters -->
+                    <div class="flex flex-wrap items-center gap-2">
+                        <span class="text-xs text-slate-400">Filtrar Tema:</span>
+                        <select id="tableChunkFilter" onchange="renderTable()" class="bg-slate-950 border border-slate-800 text-xs text-slate-200 rounded-lg px-3 py-2 focus:outline-none">
+                            <option value="ALL">Todos os Chunks</option>
+                            <!-- Dinamicamente preenchido -->
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Structured Table -->
+                <div class="bg-slate-900 rounded-xl border border-slate-800/80 overflow-hidden shadow-2xl">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-950 border-b border-slate-800 text-[11px] text-slate-400 uppercase tracking-wider">
+                                    <th class="py-3.5 px-4 font-semibold">Hanzi</th>
+                                    <th class="py-3.5 px-4 font-semibold">Pinyin</th>
+                                    <th class="py-3.5 px-4 font-semibold">Tradução</th>
+                                    <th class="py-3.5 px-4 font-semibold">Chunk Origem</th>
+                                    <th class="py-3.5 px-4 font-semibold">Nó Inter-Chunk?</th>
+                                    <th class="py-3.5 px-4 font-semibold text-right">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody id="vocabTableBody" class="divide-y divide-slate-800/60 text-sm">
+                                <!-- Filas dinâmicas -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+    </main>
+
+    <!-- MODAL: CREATING NEW CHUNK -->
+    <div id="newChunkModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="font-semibold text-slate-100 text-base flex items-center gap-2">
+                    <i data-lucide="folder-plus" class="w-5 h-5 text-sky-400"></i> Criar Novo Chunk (Tema)
+                </h3>
+                <button onclick="closeModal('newChunkModal')" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block text-slate-400 mb-1">Título do Tema / Chunk (ex: 商务汉语 - Mandarim para Negócios)</label>
+                    <input type="text" id="newChunkName" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 focus:border-sky-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-slate-400 mb-1">Cor do Identificador Visual</label>
+                    <input type="color" id="newChunkColor" value="#10b981" class="w-full h-10 bg-slate-950 border border-slate-800 rounded-lg p-1 cursor-pointer">
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                <button onclick="closeModal('newChunkModal')" class="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs">Cancelar</button>
+                <button onclick="submitNewChunk()" class="px-4 py-2 rounded-lg bg-sky-600 text-white hover:bg-sky-500 font-medium text-xs">Criar Chunk</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: ADDING NEW NODE -->
+    <div id="newNodeModal" class="hidden fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-4 overflow-y-auto max-h-[90vh]">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="font-semibold text-slate-100 text-base flex items-center gap-2">
+                    <i data-lucide="plus-circle" class="w-5 h-5 text-emerald-400"></i> Adicionar Novo Vocábulo
+                </h3>
+                <button onclick="closeModal('newNodeModal')" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="grid grid-cols-2 gap-3 text-xs">
+                <div class="col-span-2 sm:col-span-1">
+                    <label class="block text-slate-400 mb-1">Ideograma (Hanzi) *</label>
+                    <input type="text" id="newNodeHanzi" placeholder="例: 坚持" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 focus:border-sky-500 focus:outline-none">
+                </div>
+                <div class="col-span-2 sm:col-span-1">
+                    <label class="block text-slate-400 mb-1">Pinyin *</label>
+                    <input type="text" id="newNodePinyin" placeholder="jiān chí" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 focus:border-sky-500 focus:outline-none">
+                </div>
+                <div class="col-span-2">
+                    <label class="block text-slate-400 mb-1">Tradução (Português) *</label>
+                    <input type="text" id="newNodeTranslation" placeholder="Persistir / Manter o foco" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 focus:border-sky-500 focus:outline-none">
+                </div>
+                <div class="col-span-2 sm:col-span-1">
+                    <label class="block text-slate-400 mb-1">Pertence ao Chunk</label>
+                    <select id="newNodeChunkSelect" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 focus:border-sky-500 focus:outline-none">
+                        <!-- Filled dynamically -->
+                    </select>
+                </div>
+                <div class="col-span-2 sm:col-span-1">
+                    <label class="block text-slate-400 mb-1">Conectar ao Pai (Opcional)</label>
+                    <select id="newNodeParentSelect" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 focus:border-sky-500 focus:outline-none">
+                        <!-- Filled dynamically -->
+                    </select>
+                </div>
+                <div class="col-span-2">
+                    <label class="block text-slate-400 mb-1">Notas / Explicação Cultural</label>
+                    <textarea id="newNodeNotes" rows="2" placeholder="Uso e nuance do termo..." class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-slate-200 focus:border-sky-500 focus:outline-none"></textarea>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2 border-t border-slate-800">
+                <button onclick="closeModal('newNodeModal')" class="px-4 py-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs">Cancelar</button>
+                <button onclick="submitNewNode()" class="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-500 font-medium text-xs">Salvar Vocábulo</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- APPLICATION DATA STRUCTURES AND SYSTEM LOGIC -->
+    <script>
+        // Default System Database initialized with 3 interconnected Chunks
+        const DEFAULT_DATABASE = {
+            chunks: [
+                { id: 'CHUNK_POWERLIFTING', name: '力量举 - Powerlifting', color: '#f59e0b' },
+                { id: 'CHUNK_FITNESS', name: '日常健身与生活 - Rotina & Treino', color: '#0ea5e9' },
+                { id: 'CHUNK_COMPETITION', name: '竞赛与目标 - Competição & Metas', color: '#8b5cf6' }
+            ],
+            nodes: [
+                // CHUNK 1: POWERLIFTING (Original image data)
+                { id: 'liliangju', hanzi: '力量举', pinyin: 'lì liàng jǔ', translation: 'Powerlifting / Levantamento de Força', chunkId: 'CHUNK_POWERLIFTING', parent: null, isRoot: true, notes: 'Modalidade de força composta por três levantamentos principais.' },
+                { id: 'yundong', hanzi: '运动', pinyin: 'yùn dòng', translation: 'Esporte / Exercício', chunkId: 'CHUNK_POWERLIFTING', parent: 'liliangju', isRoot: false, notes: 'Termo central e chave de conexão entre esportes e rotina.' },
+                { id: 'dongzuo', hanzi: '动作', pinyin: 'dòng zuò', translation: 'Movimento / Exercício Técnico', chunkId: 'CHUNK_POWERLIFTING', parent: 'yundong', isRoot: false, notes: 'Padrão ou execução técnica de um movimento.' },
+                { id: 'sandadongzuo', hanzi: '三大动作', pinyin: 'sān dà dòng zuò', translation: 'Os 3 Movimentos Principais', chunkId: 'CHUNK_POWERLIFTING', parent: 'dongzuo', isRoot: false, notes: 'Agachamento, Supino e Levantamento Terra.' },
+                { id: 'shendun', hanzi: '深蹲', pinyin: 'shēn dūn', translation: 'Agachamento (Squat)', chunkId: 'CHUNK_POWERLIFTING', parent: 'sandadongzuo', isRoot: false, notes: 'Flexão profunda de joelhos e quadril.' },
+                { id: 'wotui', hanzi: '卧推', pinyin: 'wò tuī', translation: 'Supino (Bench Press)', chunkId: 'CHUNK_POWERLIFTING', parent: 'sandadongzuo', isRoot: false, notes: 'Empurrar a barra deitado no banco.' },
+                { id: 'yingla', hanzi: '硬拉', pinyin: 'yìng lā', translation: 'Levantamento Terra (Deadlift)', chunkId: 'CHUNK_POWERLIFTING', parent: 'sandadongzuo', isRoot: false, notes: 'Tirar o peso do solo até a extensão do quadril.' },
+                { id: 'shiju', hanzi: '试举', pinyin: 'shì jǔ', translation: 'Tentativa de Levantamento', chunkId: 'CHUNK_POWERLIFTING', parent: 'dongzuo', isRoot: false, notes: 'Cada tentativa oficial no tablado.' },
+                { id: 'jianshenfang', hanzi: '健身房', pinyin: 'jiàn shēn fáng', translation: 'Academia / Centro de Treino', chunkId: 'CHUNK_POWERLIFTING', parent: 'yundong', isRoot: false, notes: 'Espaço físico para o treino.' },
+                { id: 'gangling', hanzi: '杠铃', pinyin: 'gàng líng', translation: 'Barra Olímpica', chunkId: 'CHUNK_POWERLIFTING', parent: 'yundong', isRoot: false, notes: 'Barra de treino com pesos nas extremidades.' },
+                { id: 'ganglingpian', hanzi: '杠铃片', pinyin: 'gàng líng piàn', translation: 'Anilha / Prato de Peso', chunkId: 'CHUNK_POWERLIFTING', parent: 'yundong', isRoot: false, notes: 'Discos colocados na barra.' },
+                { id: 'yaling', hanzi: '哑铃', pinyin: 'yǎ líng', translation: 'Halter (Dumbbell)', chunkId: 'CHUNK_POWERLIFTING', parent: 'yundong', isRoot: false, notes: 'Equipamento para treino unilateral.' },
+                { id: 'jinbiaosai', hanzi: '锦标赛', pinyin: 'jǐn biāo sài', translation: 'Campeonato / Torneio', chunkId: 'CHUNK_POWERLIFTING', parent: 'yundong', isRoot: false, notes: 'Competição oficial de alto nível.' },
+                { id: 'lian', hanzi: '练', pinyin: 'liàn', translation: 'Treinar / Exercitar', chunkId: 'CHUNK_POWERLIFTING', parent: 'yundong', isRoot: false, notes: 'Verbo para ação do treino.' },
+                { id: 'yundongyuan', hanzi: '运动员', pinyin: 'yùn dòng yuán', translation: 'Atleta / Competidor', chunkId: 'CHUNK_POWERLIFTING', parent: 'yundong', isRoot: false, notes: 'Pessoa que pratica esportes em alto nível.' },
+                { id: 'jinxing', hanzi: '进行', pinyin: 'jìn xíng', translation: 'Realizar / Em andamento', chunkId: 'CHUNK_POWERLIFTING', parent: 'yundong', isRoot: false, notes: 'Conduzir ou executar uma ação formal.' },
+
+                // CHUNK 2: ROUTINE & FITNESS (Shared cross-chunk nodes: 运动, 练, 健身房)
+                { id: 'yundong_fit', hanzi: '运动', pinyin: 'yùn dòng', translation: 'Exercício Físico / Atividade', chunkId: 'CHUNK_FITNESS', parent: null, isRoot: true, notes: 'Termo reutilizado que liga o esporte com a rotina diária.' },
+                { id: 'xiuxi', hanzi: '休息', pinyin: 'xiū xi', translation: 'Descanso / Recuperação', chunkId: 'CHUNK_FITNESS', parent: 'yundong_fit', isRoot: false, notes: 'Essencial para a hipertrofia e regeneração muscular.' },
+                { id: 'jirou', hanzi: '肌肉', pinyin: 'jī ròu', translation: 'Músculo / Massa Magra', chunkId: 'CHUNK_FITNESS', parent: 'yundong_fit', isRoot: false, notes: 'Tecido muscular fortalecido nos treinos.' },
+                { id: 'danbaizhi', hanzi: '蛋白质', pinyin: 'dàn bái zhì', translation: 'Proteína (Nutrição)', chunkId: 'CHUNK_FITNESS', parent: 'yundong_fit', isRoot: false, notes: 'Nutriente fundamental para construção muscular.' },
+                { id: 'jianchi', hanzi: '坚持', pinyin: 'jiān chí', translation: 'Persistir / Manter a Frequência', chunkId: 'CHUNK_FITNESS', parent: 'yundong_fit', isRoot: false, notes: 'Consistência no treino e na dieta.' },
+                { id: 'lian_fit', hanzi: '练', pinyin: 'liàn', translation: 'Treinar / Malhar', chunkId: 'CHUNK_FITNESS', parent: 'yundong_fit', isRoot: false, notes: 'Verbo comum na rotina diária de academia.' },
+                { id: 'jianshenfang_fit', hanzi: '健身房', pinyin: 'jiàn shēn fáng', translation: 'Academia', chunkId: 'CHUNK_FITNESS', parent: 'yundong_fit', isRoot: false, notes: 'Espaço de treino diário.' },
+
+                // CHUNK 3: COMPETITION & ACHIEVEMENTS (Shared cross-chunk nodes: 锦标赛, 运动员, 试举)
+                { id: 'mubiao', hanzi: '目标', pinyin: 'mù biāo', translation: 'Meta / Objetivo', chunkId: 'CHUNK_COMPETITION', parent: null, isRoot: true, notes: 'Foco principal da preparação.' },
+                { id: 'jihua', hanzi: '计划', pinyin: 'jì huà', translation: 'Plano de Treino / Cronograma', chunkId: 'CHUNK_COMPETITION', parent: 'mubiao', isRoot: false, notes: 'Estruturação das cargas e semanas.' },
+                { id: 'chenggong', hanzi: '成功', pinyin: 'chéng gōng', translation: 'Sucesso / Obter Êxito', chunkId: 'CHUNK_COMPETITION', parent: 'mubiao', isRoot: false, notes: 'Validação da tentativa no campeonato.' },
+                { id: 'jinbiaosai_comp', hanzi: '锦标赛', pinyin: 'jǐn biāo sài', translation: 'Campeonato Oficial', chunkId: 'CHUNK_COMPETITION', parent: 'mubiao', isRoot: false, notes: 'Evento de competição.' },
+                { id: 'yundongyuan_comp', hanzi: '运动员', pinyin: 'yùn dòng yuán', translation: 'Atleta de Elite', chunkId: 'CHUNK_COMPETITION', parent: 'mubiao', isRoot: false, notes: 'Participante da competição.' },
+                { id: 'shiju_comp', hanzi: '试举', pinyin: 'shì jǔ', translation: 'Pedida / Tentativa', chunkId: 'CHUNK_COMPETITION', parent: 'chenggong', isRoot: false, notes: 'Tentativa bem-sucedida.' }
+            ],
+            // Dynamic Sample Sentence Bank
+            sentences: {
+                'liliangju': [
+                    { hanzi: '力量举比赛非常刺激。', pinyin: 'Lìliàngjǔ bǐsài fēicháng cìjī.', trans: 'A competição de powerlifting é muito empolgante.', grammar: '力量举 (Powerlifting) + 比赛 (competição)' },
+                    { hanzi: '他是一名专业的力量举运动员。', pinyin: 'Tā shì yī míng zhuānyè de lìliàngjǔ yùndòngyuán.', trans: 'Ele é um atleta profissional de powerlifting.', grammar: 'Uso de 力量举 como adjetivo qualificador.' }
+                ],
+                'shendun': [
+                    { hanzi: '今天我们要练深蹲。', pinyin: 'Jīntiān wǒmen yào liàn shēn dūn.', trans: 'Hoje nós vamos treinar agachamento.', grammar: '练 (treinar) + 深蹲 (agachamento).' },
+                    { hanzi: '他的深蹲动作非常标准。', pinyin: 'Tā de shēndūn dòngzuò fēicháng biāozhǔn.', trans: 'A execução do agachamento dele é extremamente correta.', grammar: '深蹲 + 动作 (técnica do movimento).' }
+                ],
+                'yundong': [
+                    { hanzi: '坚持运动对健康很重要。', pinyin: 'Jiānchí yùndòng duì jiànkāng hěn zhòngyào.', trans: 'Persistir nos exercícios é muito importante para a saúde.', grammar: 'Combina 坚持 (persistir) + 运动 (exercício).' },
+                    { hanzi: '力量举是一项有挑战性的运动。', pinyin: 'Lìliàngjǔ shì yī xiàng yǒu tiǎozhànxìng de yùndòng.', trans: 'O powerlifting é um esporte desafiador.', grammar: '运动 funcionando como substantivo genérico.' }
+                ],
+                'jianchi': [
+                    { hanzi: '在健身房训练需要坚持。', pinyin: 'Zài jiànshēnfáng xùnliàn xūyào jiānchí.', trans: 'Treinar na academia exige persistência.', grammar: 'Ancorado em 健身房 (academia).' }
+                ]
+            }
+        };
+
+        // App Active State
+        let db = JSON.parse(localStorage.getItem('sinograph_db')) || DEFAULT_DATABASE;
+        let selectedChunkId = 'GLOBAL';
+        let selectedNodeId = 'liliangju';
+        let activeTab = 'graph';
+        let hidePinyin = false;
+        let hideTrans = false;
+
+        // D3 Physics Simulation Engine Variables
+        let svg, gContainer, simulation, zoomHandler;
+        let nodesData = [], linksData = [];
+
+        // ON APP LOAD
+        window.onload = function() {
+            lucide.createIcons();
+            populateChunkSelectors();
+            initD3Graph();
+            updateDataViews();
+        };
+
+        // SAVE DB LOCAL
+        function saveDB() {
+            localStorage.setItem('sinograph_db', JSON.stringify(db));
+        }
+
+        function resetToDefaultData() {
+            db = JSON.parse(JSON.stringify(DEFAULT_DATABASE));
+            saveDB();
+            populateChunkSelectors();
+            updateDataViews();
+            toggleDataMenu();
+        }
+
+        // POPULATE SELECTORS
+        function populateChunkSelectors() {
+            const chunkSelect = document.getElementById('chunkSelect');
+            const nodeChunkSelect = document.getElementById('newNodeChunkSelect');
+            const tableChunkFilter = document.getElementById('tableChunkFilter');
+
+            chunkSelect.innerHTML = `<option value="GLOBAL" class="bg-slate-900">🌐 Todos os Chunks (Teia Geral)</option>`;
+            nodeChunkSelect.innerHTML = '';
+            tableChunkFilter.innerHTML = `<option value="ALL">Todos os Chunks</option>`;
+
+            db.chunks.forEach(c => {
+                chunkSelect.innerHTML += `<option value="${c.id}" class="bg-slate-900">${c.name}</option>`;
+                nodeChunkSelect.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+                tableChunkFilter.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+            });
+
+            chunkSelect.value = selectedChunkId;
+        }
+
+        // CALCULATE CROSS-CHUNK REPEATED HANZI NODES
+        function getCrossChunkHanziSet() {
+            const counts = {};
+            db.nodes.forEach(n => {
+                counts[n.hanzi] = (counts[n.hanzi] || 0) + 1;
+            });
+            const crossSet = new Set();
+            Object.keys(counts).forEach(hanzi => {
+                if (counts[hanzi] > 1) crossSet.add(hanzi);
+            });
+            return crossSet;
+        }
+
+        // PREPARE D3 NODES AND LINKS DATA
+        function prepareGraphData() {
+            const crossHanziSet = getCrossChunkHanziSet();
+
+            // Filter nodes by active chunk selector
+            let filteredNodes = db.nodes.filter(n => {
+                if (selectedChunkId === 'GLOBAL') return true;
+                return n.chunkId === selectedChunkId;
+            });
+
+            const nodeMap = new Map();
+            nodesData = filteredNodes.map(n => {
+                const chunkObj = db.chunks.find(c => c.id === n.chunkId) || { color: '#0ea5e9' };
+                const isCross = crossHanziSet.has(n.hanzi);
+                
+                const graphNode = {
+                    ...n,
+                    color: chunkObj.color,
+                    isCross: isCross,
+                    radius: n.isRoot ? 28 : isCross ? 24 : 20
+                };
+                nodeMap.set(n.id, graphNode);
+                return graphNode;
+            });
+
+            // Create Link objects
+            linksData = [];
+            
+            // 1. Structural Parent-Child Links
+            nodesData.forEach(node => {
+                if (node.parent && nodeMap.has(node.parent)) {
+                    linksData.push({
+                        source: node.parent,
+                        target: node.id,
+                        type: 'structure'
+                    });
+                }
+            });
+
+            // 2. Inter-chunk Cross Links (matching identical Hanzi)
+            if (selectedChunkId === 'GLOBAL') {
+                for (let i = 0; i < nodesData.length; i++) {
+                    for (let j = i + 1; j < nodesData.length; j++) {
+                        if (nodesData[i].hanzi === nodesData[j].hanzi && nodesData[i].chunkId !== nodesData[j].chunkId) {
+                            linksData.push({
+                                source: nodesData[i].id,
+                                target: nodesData[j].id,
+                                type: 'cross-chunk'
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // INITIALIZE D3 GRAPH CANVAS
+        function initD3Graph() {
+            const container = document.getElementById('graphContainer');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            d3.select("#d3GraphSvg").selectAll("*").remove();
+
+            svg = d3.select("#d3GraphSvg")
+                .attr("width", width)
+                .attr("height", height);
+
+            gContainer = svg.append("g").attr("id", "gViewport");
+
+            // Setup Zoom / Pan
+            zoomHandler = d3.zoom()
+                .scaleExtent([0.2, 3])
+                .on("zoom", (event) => {
+                    gContainer.attr("transform", event.transform);
+                });
+
+            svg.call(zoomHandler);
+
+            // Setup Force Simulation
+            simulation = d3.forceSimulation()
+                .force("link", d3.forceLink().id(d => d.id).distance(d => d.type === 'cross-chunk' ? 140 : 80))
+                .force("charge", d3.forceManyBody().strength(-350))
+                .force("center", d3.forceCenter(width / 2, height / 2))
+                .force("collide", d3.forceCollide().radius(d => d.radius + 20));
+
+            renderD3Graph();
+        }
+
+        // RENDER GRAPH ELEMENTS WITH D3
+        function renderD3Graph() {
+            prepareGraphData();
+
+            gContainer.selectAll("*").remove();
+
+            // Render Links
+            const linkGroup = gContainer.append("g").attr("class", "links");
+            const link = linkGroup.selectAll("line")
+                .data(linksData)
+                .enter().append("line")
+                .attr("class", d => `link-line ${d.type}`)
+                .attr("stroke", d => d.type === 'cross-chunk' ? '#10b981' : '#334155')
+                .attr("stroke-width", d => d.type === 'cross-chunk' ? 2 : 1.5);
+
+            // Render Nodes
+            const nodeGroup = gContainer.append("g").attr("class", "nodes");
+            const node = nodeGroup.selectAll("g")
+                .data(nodesData)
+                .enter().append("g")
+                .attr("class", "node-group")
+                .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended))
+                .on("click", (event, d) => {
+                    event.stopPropagation();
+                    selectNode(d.id);
+                });
+
+            // Node Circle Shapes
+            node.append("circle")
+                .attr("r", d => d.radius)
+                .attr("fill", "#0f172a")
+                .attr("stroke", d => d.color)
+                .attr("stroke-width", d => d.isRoot ? 3.5 : d.isCross ? 3 : 2)
+                .attr("class", d => `node-circle ${d.isCross ? 'is-cross' : ''}`)
+                .attr("id", d => `circle-${d.id}`);
+
+            // Hanzi Labels inside nodes
+            node.append("text")
+                .attr("class", "node-label-hanzi")
+                .attr("text-anchor", "middle")
+                .attr("dy", d => hidePinyin ? "0.35em" : "-0.2em")
+                .attr("fill", "#f8fafc")
+                .attr("font-size", d => d.radius > 22 ? "14px" : "12px")
+                .text(d => d.hanzi);
+
+            // Pinyin Sub-labels
+            node.append("text")
+                .attr("class", "node-label-pinyin")
+                .attr("text-anchor", "middle")
+                .attr("dy", "1.2em")
+                .style("display", hidePinyin ? "none" : "block")
+                .text(d => d.pinyin);
+
+            // Tick Update Function
+            simulation.nodes(nodesData).on("tick", () => {
+                link
+                    .attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+
+                node
+                    .attr("transform", d => `translate(${d.x},${d.y})`);
+            });
+
+            simulation.force("link").links(linksData);
+            simulation.alpha(1).restart();
+
+            // Re-apply selection highlight
+            if (selectedNodeId) highlightSelectedNodeInGraph(selectedNodeId);
+        }
+
+        // DRAG FORCE ENGINE HANDLERS
+        function dragstarted(event, d) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            d.fx = d.x;
+            d.fy = d.y;
+        }
+        function dragged(event, d) {
+            d.fx = event.x;
+            d.fy = event.y;
+        }
+        function dragended(event, d) {
+            if (!event.active) simulation.alphaTarget(0);
+            if (!event.sourceEvent.shiftKey) {
+                d.fx = null;
+                d.fy = null;
+            }
+        }
+
+        // ZOOM CONTROLS
+        function zoomGraph(factor) {
+            svg.transition().duration(300).call(zoomHandler.scaleBy, factor);
+        }
+        function resetGraphZoom() {
+            svg.transition().duration(500).call(zoomHandler.transform, d3.zoomIdentity);
+        }
+
+        // SELECT NODE AND UPDATE SIDEBAR & GRAPH HIGHLIGHTS
+        function selectNode(id) {
+            selectedNodeId = id;
+            const node = db.nodes.find(n => n.id === id);
+            if (!node) return;
+
+            highlightSelectedNodeInGraph(id);
+            renderSidebarDetails(node);
+        }
+
+        function highlightSelectedNodeInGraph(id) {
+            const node = db.nodes.find(n => n.id === id);
+            if (!node) return;
+
+            // Reset all circles
+            d3.selectAll(".node-circle")
+                .attr("stroke-width", d => d.isRoot ? 3.5 : d.isCross ? 3 : 2)
+                .attr("stroke", d => d.color);
+
+            d3.selectAll(".link-line")
+                .classed("highlighted", false);
+
+            // Highlight target circle
+            d3.select(`#circle-${id}`)
+                .attr("stroke", "#38bdf8")
+                .attr("stroke-width", 5);
+
+            // Highlight links attached to this node
+            d3.selectAll(".link-line")
+                .filter(d => d.source.id === id || d.target.id === id)
+                .classed("highlighted", true);
+        }
+
+        // RENDER DETAILED INSPECTION SIDEBAR
+        function renderSidebarDetails(node) {
+            const sidebarBody = document.getElementById('sidebarBody');
+            const sidebarChunkTag = document.getElementById('sidebarChunkTag');
+
+            const chunkObj = db.chunks.find(c => c.id === node.chunkId) || { name: 'Geral', color: '#0ea5e9' };
+            sidebarChunkTag.textContent = chunkObj.name;
+            sidebarChunkTag.style.borderColor = chunkObj.color;
+
+            // Find Cross-Chunk Identical Hanzi Nodes
+            const crossMatches = db.nodes.filter(n => n.hanzi === node.hanzi && n.id !== node.id);
+
+            // Fetch or Generate Sentences for this Node
+            const sentences = db.sentences[node.id] || [
+                {
+                    hanzi: `在训练中，${node.hanzi}非常重要。`,
+                    pinyin: `Zài xùnliàn zhōng, ${node.pinyin} fēicháng zhòngyào.`,
+                    trans: `No treino, "${node.translation.split('/')[0]}" é muito importante.`,
+                    grammar: 'Frase de contexto padrão gerada automaticamente.'
+                }
+            ];
+
+            sidebarBody.innerHTML = `
+                <!-- Main Word Card -->
+                <div class="bg-slate-950 p-5 rounded-2xl border border-slate-800 text-center relative shadow-xl">
+                    <button onclick="speakChinese('${node.hanzi}')" title="Ouvir Pronúncia Módula" class="absolute top-3 right-3 p-2 text-sky-400 hover:text-sky-300 hover:bg-sky-500/10 rounded-xl transition">
+                        <i data-lucide="volume-2" class="w-5 h-5"></i>
+                    </button>
+                    <div class="text-4xl font-black text-slate-100 tracking-wide mb-1">${node.hanzi}</div>
+                    <div class="text-sky-400 font-medium text-sm pinyin-text ${hidePinyin ? 'blur-recall' : ''}">${node.pinyin}</div>
+                    <div class="mt-3 pt-3 border-t border-slate-800 text-slate-200 font-semibold text-base trans-text ${hideTrans ? 'blur-recall' : ''}">
+                        ${node.translation}
+                    </div>
+                </div>
+
+                <!-- Cross-Chunk Navigation Links (If word exists in multiple themes) -->
+                ${crossMatches.length > 0 ? `
+                    <div class="bg-emerald-950/40 p-3.5 rounded-xl border border-emerald-800/50 space-y-2">
+                        <div class="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
+                            <i data-lucide="git-merge" class="w-4 h-4"></i> Conexão Inter-Chunk Detectada!
+                        </div>
+                        <p class="text-[11px] text-slate-300">Este mesmo ideograma (${node.hanzi}) também é utilizado nos seguintes temas:</p>
+                        <div class="flex flex-wrap gap-1.5 pt-1">
+                            ${crossMatches.map(m => {
+                                const targetChunk = db.chunks.find(c => c.id === m.chunkId);
+                                return `
+                                    <button onclick="jumpToCrossNode('${m.id}')" class="px-2.5 py-1 rounded-lg bg-emerald-900/60 hover:bg-emerald-800 text-emerald-200 border border-emerald-700/60 text-xs flex items-center gap-1 transition">
+                                        <i data-lucide="external-link" class="w-3 h-3"></i>
+                                        <span>${targetChunk ? targetChunk.name : 'Outro Chunk'}</span>
+                                    </button>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                ` : ''}
+
+                <!-- Cultural / Grammar Notes -->
+                <div class="space-y-1.5">
+                    <label class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <i data-lucide="info" class="w-3.5 h-3.5 text-sky-400"></i> Notas & Nuances
+                    </label>
+                    <div class="text-xs text-slate-300 bg-slate-950/60 p-3 rounded-xl border border-slate-800/80 leading-relaxed">
+                        ${node.notes || 'Sem notas gramaticais específicas para esta palavra.'}
+                    </div>
+                </div>
+
+                <!-- Sentence Gallery with Audio & Grammar -->
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <label class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                            <i data-lucide="quote" class="w-3.5 h-3.5 text-sky-400"></i> Frases de Exemplo (${sentences.length})
+                        </label>
+                    </div>
+
+                    <div class="space-y-2.5">
+                        ${sentences.map((s, idx) => `
+                            <div class="bg-slate-950/80 p-3.5 rounded-xl border border-slate-800 space-y-1.5 relative group hover:border-slate-700 transition">
+                                <button onclick="speakChinese('${s.hanzi}')" title="Ouvir Frase" class="absolute top-3 right-3 text-slate-500 hover:text-sky-400 transition">
+                                    <i data-lucide="volume-2" class="w-4 h-4"></i>
+                                </button>
+                                <div class="text-sm font-semibold text-slate-100 pr-6">${highlightKeyword(s.hanzi, node.hanzi)}</div>
+                                <div class="text-xs text-sky-400 pinyin-text ${hidePinyin ? 'blur-recall' : ''}">${s.pinyin}</div>
+                                <div class="text-xs text-slate-300 trans-text ${hideTrans ? 'blur-recall' : ''}">${s.trans}</div>
+                                ${s.grammar ? `<div class="text-[10px] text-slate-500 pt-1 border-t border-slate-900 italic">${s.grammar}</div>` : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <!-- Dynamic Multi-Word Combiner Generator -->
+                <div class="pt-2 border-t border-slate-800/80 space-y-2">
+                    <label class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                        <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-400"></i> Gerar Frase Combinada Inter-Chunk
+                    </label>
+                    <p class="text-[11px] text-slate-400">Combine <strong class="text-slate-200">${node.hanzi}</strong> com outra palavra de qualquer chunk para gerar uma nova estrutura:</p>
+                    <div class="flex gap-2">
+                        <select id="secondWordSelect" class="flex-1 bg-slate-950 border border-slate-800 rounded-lg text-xs p-2 text-slate-200">
+                            ${db.nodes.filter(n => n.id !== node.id).map(n => `<option value="${n.id}">${n.hanzi} (${n.translation.split('/')[0]})</option>`).join('')}
+                        </select>
+                        <button onclick="generateCombinedSentence('${node.id}')" class="px-3 py-2 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded-lg text-xs transition flex items-center gap-1">
+                            <i data-lucide="wand-2" class="w-3.5 h-3.5"></i> Combined
+                        </button>
+                    </div>
+                    <div id="combinedSentenceOutput" class="hidden bg-amber-950/20 border border-amber-800/40 p-3 rounded-xl text-xs space-y-1"></div>
+                </div>
+            `;
+
+            lucide.createIcons();
+        }
+
+        // HIGHLIGHT KEYWORD IN SENTENCE
+        function highlightKeyword(sentence, keyword) {
+            if (!keyword) return sentence;
+            return sentence.replace(new RegExp(keyword, 'g'), `<span class="text-amber-400 font-bold bg-amber-500/10 px-1 rounded border border-amber-500/20">${keyword}</span>`);
+        }
+
+        // JUMP TO CROSS NODE IN GRAPH
+        function jumpToCrossNode(nodeId) {
+            const node = db.nodes.find(n => n.id === nodeId);
+            if (!node) return;
+
+            if (selectedChunkId !== 'GLOBAL' && selectedChunkId !== node.chunkId) {
+                selectedChunkId = 'GLOBAL';
+                document.getElementById('chunkSelect').value = 'GLOBAL';
+                renderD3Graph();
+            }
+
+            selectNode(nodeId);
+        }
+
+        // COMBINED PHRASE GENERATOR
+        function generateCombinedSentence(firstNodeId) {
+            const secondNodeId = document.getElementById('secondWordSelect').value;
+            const w1 = db.nodes.find(n => n.id === firstNodeId);
+            const w2 = db.nodes.find(n => n.id === secondNodeId);
+            const output = document.getElementById('combinedSentenceOutput');
+
+            if (!w1 || !w2) return;
+
+            // Generate contextual sentence dynamically combining two distinct terms
+            const combinedHanzi = `在${w1.hanzi}过程中，合理使用${w2.hanzi}非常关键。`;
+            const combinedPinyin = `Zài ${w1.pinyin} guòchéng zhōng, hélǐ shǐyòng ${w2.pinyin} fēicháng guānjiàn.`;
+            const combinedTrans = `No processo de ${w1.translation.split('/')[0]}, usar corretamente ${w2.translation.split('/')[0]} é fundamental.`;
+
+            output.classList.remove('hidden');
+            output.innerHTML = `
+                <div class="flex items-center justify-between font-semibold text-amber-300">
+                    <span>Frase Combinada:</span>
+                    <button onclick="speakChinese('${combinedHanzi}')" class="text-amber-400 hover:text-amber-200"><i data-lucide="volume-2" class="w-4 h-4"></i></button>
+                </div>
+                <div class="text-sm font-semibold text-slate-100">${combinedHanzi}</div>
+                <div class="text-sky-400 pinyin-text ${hidePinyin ? 'blur-recall' : ''}">${combinedPinyin}</div>
+                <div class="text-slate-300 trans-text ${hideTrans ? 'blur-recall' : ''}">${combinedTrans}</div>
+            `;
+            lucide.createIcons();
+        }
+
+        // VOCABULARY TABLE RENDERER
+        function renderTable() {
+            const tbody = document.getElementById('vocabTableBody');
+            tbody.innerHTML = '';
+
+            const searchVal = document.getElementById('tableSearchInput').value.toLowerCase();
+            const filterChunk = document.getElementById('tableChunkFilter').value;
+            const crossSet = getCrossChunkHanziSet();
+
+            const filtered = db.nodes.filter(n => {
+                const matchChunk = filterChunk === 'ALL' || n.chunkId === filterChunk;
+                const matchSearch = n.hanzi.toLowerCase().includes(searchVal) ||
+                                    n.pinyin.toLowerCase().includes(searchVal) ||
+                                    n.translation.toLowerCase().includes(searchVal) ||
+                                    (n.notes && n.notes.toLowerCase().includes(searchVal));
+                return matchChunk && matchSearch;
+            });
+
+            filtered.forEach(node => {
+                const chunkObj = db.chunks.find(c => c.id === node.chunkId) || { name: 'Geral', color: '#0ea5e9' };
+                const isCross = crossSet.has(node.hanzi);
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-800/40 transition border-b border-slate-800/60";
+                tr.innerHTML = `
+                    <td class="py-3 px-4 font-bold text-base text-slate-100">${node.hanzi}</td>
+                    <td class="py-3 px-4 text-sky-400 font-medium pinyin-text ${hidePinyin ? 'blur-recall' : ''}">${node.pinyin}</td>
+                    <td class="py-3 px-4 text-slate-200 font-medium trans-text ${hideTrans ? 'blur-recall' : ''}">${node.translation}</td>
+                    <td class="py-3 px-4">
+                        <span class="text-xs px-2.5 py-1 rounded-md bg-slate-950 border border-slate-800" style="color:${chunkObj.color}">
+                            ${chunkObj.name}
+                        </span>
+                    </td>
+                    <td class="py-3 px-4">
+                        ${isCross ? `
+                            <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center gap-1 w-fit">
+                                <i data-lucide="git-merge" class="w-3 h-3"></i> Inter-Chunk
+                            </span>
+                        ` : `<span class="text-slate-600 text-xs">-</span>`}
+                    </td>
+                    <td class="py-3 px-4 text-right space-x-1">
+                        <button onclick="speakChinese('${node.hanzi}')" title="Ouvir Pronúncia" class="p-1.5 text-slate-400 hover:text-sky-400 hover:bg-sky-500/10 rounded-lg transition">
+                            <i data-lucide="volume-2" class="w-4 h-4"></i>
+                        </button>
+                        <button onclick="switchMainTab('graph'); selectNode('${node.id}')" title="Ver no Grafo" class="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition">
+                            <i data-lucide="git-fork" class="w-4 h-4"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            lucide.createIcons();
+        }
+
+        // UPDATE UI ON DATA CHANGE
+        function updateDataViews() {
+            renderD3Graph();
+            renderTable();
+            if (selectedNodeId) selectNode(selectedNodeId);
+        }
+
+        // SELECT CHUNK CHANGE
+        function onChunkSelectChange(chunkId) {
+            selectedChunkId = chunkId;
+            renderD3Graph();
+        }
+
+        // TAB SWITCHING
+        function switchMainTab(tab) {
+            activeTab = tab;
+            const graphView = document.getElementById('graphView');
+            const tableView = document.getElementById('tableView');
+            const tabGraphBtn = document.getElementById('tabGraphBtn');
+            const tabTableBtn = document.getElementById('tabTableBtn');
+
+            if (tab === 'graph') {
+                graphView.classList.remove('hidden');
+                tableView.classList.add('hidden');
+                tabGraphBtn.className = "px-3 py-1 rounded-md text-xs font-medium transition flex items-center gap-1.5 bg-sky-600 text-white shadow";
+                tabTableBtn.className = "px-3 py-1 rounded-md text-xs font-medium transition flex items-center gap-1.5 text-slate-400 hover:text-slate-200";
+            } else {
+                graphView.classList.add('hidden');
+                tableView.classList.remove('hidden');
+                tabTableBtn.className = "px-3 py-1 rounded-md text-xs font-medium transition flex items-center gap-1.5 bg-sky-600 text-white shadow";
+                tabGraphBtn.className = "px-3 py-1 rounded-md text-xs font-medium transition flex items-center gap-1.5 text-slate-400 hover:text-slate-200";
+                renderTable();
+            }
+        }
+
+        // ACTIVE RECALL TOGGLE
+        function toggleRecall(type) {
+            if (type === 'pinyin') {
+                hidePinyin = !hidePinyin;
+                document.getElementById('togglePinyinBtn').classList.toggle('bg-sky-600/20', hidePinyin);
+            } else {
+                hideTrans = !hideTrans;
+                document.getElementById('toggleTranslationBtn').classList.toggle('bg-sky-600/20', hideTrans);
+            }
+            renderD3Graph();
+            renderTable();
+            if (selectedNodeId) selectNode(selectedNodeId);
+        }
+
+        // MODAL HELPERS
+        function openNewChunkModal() {
+            document.getElementById('newChunkModal').classList.remove('hidden');
+        }
+        function openNewNodeModal() {
+            const select = document.getElementById('newNodeParentSelect');
+            select.innerHTML = '<option value="">Sem Nó Pai (Raiz)</option>';
+            db.nodes.forEach(n => {
+                select.innerHTML += `<option value="${n.id}">${n.hanzi} (${n.translation.split('/')[0]})</option>`;
+            });
+
+            document.getElementById('newNodeChunkSelect').value = selectedChunkId === 'GLOBAL' ? db.chunks[0].id : selectedChunkId;
+            document.getElementById('newNodeModal').classList.remove('hidden');
+        }
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.add('hidden');
+        }
+
+        // SUBMIT NEW CHUNK
+        function submitNewChunk() {
+            const name = document.getElementById('newChunkName').value.trim();
+            const color = document.getElementById('newChunkColor').value;
+
+            if (!name) return;
+
+            const id = 'CHUNK_' + Date.now();
+            db.chunks.push({ id, name, color });
+            saveDB();
+            populateChunkSelectors();
+            closeModal('newChunkModal');
+            document.getElementById('newChunkName').value = '';
+        }
+
+        // SUBMIT NEW NODE
+        function submitNewNode() {
+            const hanzi = document.getElementById('newNodeHanzi').value.trim();
+            const pinyin = document.getElementById('newNodePinyin').value.trim();
+            const translation = document.getElementById('newNodeTranslation').value.trim();
+            const chunkId = document.getElementById('newNodeChunkSelect').value;
+            const parent = document.getElementById('newNodeParentSelect').value || null;
+            const notes = document.getElementById('newNodeNotes').value.trim();
+
+            if (!hanzi || !pinyin || !translation) return;
+
+            const id = 'node_' + Date.now();
+            db.nodes.push({
+                id, hanzi, pinyin, translation, chunkId, parent, isRoot: !parent, notes
+            });
+
+            saveDB();
+            updateDataViews();
+            selectNode(id);
+            closeModal('newNodeModal');
+
+            // Clear Form
+            document.getElementById('newNodeHanzi').value = '';
+            document.getElementById('newNodePinyin').value = '';
+            document.getElementById('newNodeTranslation').value = '';
+            document.getElementById('newNodeNotes').value = '';
+        }
+
+        // EXPORT / IMPORT JSON
+        function toggleDataMenu() {
+            document.getElementById('dataMenu').classList.toggle('hidden');
+        }
+
+        function exportDataJSON() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db, null, 2));
+            const dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("download", `sinograph_chunks_backup_${new Date().toISOString().slice(0,10)}.json`);
+            dlAnchorElem.click();
+            toggleDataMenu();
+        }
+
+        function importDataJSON(event) {
+            const fileReader = new FileReader();
+            fileReader.onload = function(e) {
+                try {
+                    const importedDB = JSON.parse(e.target.result);
+                    if (importedDB.chunks && importedDB.nodes) {
+                        db = importedDB;
+                        saveDB();
+                        populateChunkSelectors();
+                        updateDataViews();
+                        alert("Dados importados com sucesso!");
+                    } else {
+                        alert("Formato de arquivo JSON inválido.");
+                    }
+                } catch (err) {
+                    alert("Erro ao ler o arquivo JSON.");
+                }
+            };
+            fileReader.readAsText(event.target.files[0]);
+            toggleDataMenu();
+        }
+
+        // SPEECH SYNTHESIS ENGINE
+        function speakChinese(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'zh-CN';
+                utterance.rate = 0.85;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+    </script>
+</body>
+</html>
